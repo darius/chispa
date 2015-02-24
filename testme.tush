@@ -1,0 +1,115 @@
+Start with some sample files to index.
+
+$ mkdir corpus
+
+$ echo  >corpus/two-cities 'It was the best of times, it was the worst of times; it ws the age of wisdom, it was the age of foolishness; it was the epoch of belief, it was the epoch of incredulity; it was the season of Light, it was the season of Darkness; it was the spring of hope, it was the winter of despair; we had everything before us, we had nothing before us; we were all going directly to Heaven, we were all going the other way.'
+
+$ echo  >corpus/richard     'Now is the winter of our discontent'
+$ echo >>corpus/richard     'Made glorious summer by this son of York.'
+
+$ echo  >corpus/hobbit      'In a hole in the ground there lived a hobbit.'
+
+$ echo  >corpus/scaramouche 'He was born with a gift of laughter'
+$ echo >>corpus/scaramouche 'and a sense that the world was mad.'
+
+$ echo  >corpus/walrus      'The sun was shining on the sea,'
+$ echo >>corpus/walrus      'Shining with all his might:'
+$ echo >>corpus/walrus      'He did his very best to make'
+$ echo >>corpus/walrus      'The billows smooth and bright --'
+$ echo >>corpus/walrus      'And this was odd, because it was'
+$ echo >>corpus/walrus      'The middle of the night.'
+
+Now make an index and query it.
+
+$ ../interim_chispa.py new quotes
+$ ../interim_chispa.py index quotes corpus
+| indexing two-cities
+| indexing hobbit
+| indexing walrus
+| indexing richard
+| indexing scaramouche
+
+A simple, failing query. (N.B. its exit status is 0. It'd be nice to 
+make it give status 1 on no matches.)
+
+$ ../interim_chispa.py find quotes foofooraw
+
+A simple, successful one.
+
+$ ../interim_chispa.py find quotes winter
+| corpus/richard
+| corpus/two-cities
+
+Multiword queries.
+
+$ ../interim_chispa.py find quotes it was the best of
+| corpus/two-cities
+| corpus/walrus
+
+$ ../interim_chispa.py find quotes it was the best of times
+| corpus/two-cities
+
+$ ../interim_chispa.py find quotes it was the best of billows
+| corpus/walrus
+
+$ ../interim_chispa.py find quotes it was the best of sense
+
+$ ../interim_chispa.py find quotes it was the of 
+@ Traceback (most recent call last):
+@   File "../interim_chispa.py", line 376, in <module>
+@     main(sys.argv)
+@   File "../interim_chispa.py", line 34, in main
+@     search_ui(argv[2], argv[3:], omit_stopwords)
+@   File "../interim_chispa.py", line 41, in search_ui
+@     raise Exception("The query is empty after stripping stopwords")
+@ Exception: The query is empty after stripping stopwords
+? 1
+
+OK, now let's update.
+
+$ echo  >corpus/moby        'Call me Ishmael. '
+
+$ echo >>corpus/hobbit      'Not a nasty, dirty, wet hole, filled with the ends of worms and an oozy smell, nor yet a dry, bare, sandy hole with nothing in it to sit down on or to eat: it was a hobbit-hole, and that means comfort.'
+
+$ ../interim_chispa.py index quotes corpus
+| indexing moby
+| indexing hobbit
+
+Repeat the old queries.
+
+$ ../interim_chispa.py find quotes foofooraw
+
+$ ../interim_chispa.py find quotes winter
+| corpus/richard
+| corpus/two-cities
+
+$ ../interim_chispa.py find quotes it was the best of
+| corpus/two-cities
+| corpus/walrus
+
+$ ../interim_chispa.py find quotes it was the best of times
+| corpus/two-cities
+
+$ ../interim_chispa.py find quotes it was the best of billows
+| corpus/walrus
+
+$ ../interim_chispa.py find quotes it was the best of sense
+
+$ ../interim_chispa.py find quotes hole
+| corpus/hobbit
+
+$ ../interim_chispa.py find quotes nothing
+| corpus/hobbit
+| corpus/two-cities
+
+$ ../interim_chispa.py find quotes mad laughter
+| corpus/scaramouche
+
+Now document deletion.
+
+$ rm corpus/scaramouche
+
+$ ../interim_chispa.py index quotes corpus
+| missing scaramouche
+
+$ ../interim_chispa.py find quotes mad laughter
