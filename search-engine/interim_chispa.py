@@ -48,7 +48,12 @@ def search_ui(index_path, query, term_filter):
 def search(index_path, terms):
     """Yield the paths, relative to ., of all the files that, according to
     the index, have all of the terms."""
-    for path in ask_index(index_path, 'search', query=terms):
+    for chances in range(4, -1, -1):
+        try:
+            paths = ask_index(index_path, 'search', query=terms)
+        except IOError:
+            if chances == 0: raise
+    for path in paths:
         yield relpath(path, start='.')
 
 
@@ -111,34 +116,35 @@ def ask_index(index_path, command, **arguments):
 
     if command == 'update':
         # Start a write transaction.
-        catalog = join(index_path, 'catalog-%s' % os.getpid())
-        os.rename(join(index_path, 'catalog.pickle'), catalog)
-    else:
-        catalog = join(index_path, 'catalog.pickle')
+        try:
+            write_lock = open(join(index_path, 'write_lock'), 'xb')
+        except FileExistsError:
+            raise Exception("The index at %s seems to be busy on another update."
+                            % index_path)
 
-    with open(catalog, 'rb') as catalog_file:
-        catalog_data = pickle.load(catalog_file)
+    catalog_path = join(index_path, 'catalog.pickle')
+    with open(catalog_path, 'rb') as catalog_file:
+        catalog = pickle.load(catalog_file)
 
     runs = {join(index_path, str(run_id)): size
-            for run_id, size in catalog_data['runs'].items()}
-    next_runs = itertools.count(max(catalog_data['runs']) + 1 if runs else 0)
+            for run_id, size in catalog['runs'].items()}
+    next_runs = itertools.count(max(catalog['runs']) + 1 if runs else 0)
     def new_run():
         return join(index_path, str(next(next_runs)))
 
-    trash = []
+    trash = []                  # Directories to delete
 
-    documents = catalog_data['documents']
+    documents = catalog['documents']
     doc_ids = {path: doc_id for doc_id, (path, _) in documents.items()}
 
-    next_doc_ids = (str(ii) for ii in itertools.count(int(catalog_data['next_id'])))
+    next_doc_ids = (str(ii) for ii in itertools.count(int(catalog['next_id'])))
 
-    def write_catalog(path):
-        with open(path, 'wb') as f:
-            pickle.dump({'runs': {int(basename(run)): size
-                                  for run, size in runs.items()},
-                         'documents': documents,
-                         'next_id': next(next_doc_ids)},
-                        f)
+    def write_catalog(catalog_file):
+        pickle.dump({'runs': {int(basename(run)): size
+                              for run, size in runs.items()},
+                     'documents': documents,
+                     'next_id': next(next_doc_ids)},
+                    catalog_file)
 
     def doc_path(doc_id):     return from_relpath(documents[doc_id][0])
     def doc_metadata(doc_id): return documents[doc_id][1]
@@ -164,19 +170,19 @@ def ask_index(index_path, command, **arguments):
                 write_new_run(sorted(run_postings))
             merge_some_runs()
             # Commit to the updated catalog.
-            write_catalog(join(index_path, 'next-catalog'))
-            os.rename(join(index_path, 'next-catalog'), join(index_path, 'catalog.pickle'))
+            write_catalog(write_lock)
+            os.rename(write_lock.name, catalog_path)
+            write_lock.close()
         except: # Or roll it back.
-            os.rename(catalog, join(index_path, 'catalog.pickle'))
+            os.remove(write_lock.name)
             raise
         else:
-            os.remove(catalog)
             for run in trash:
                 shutil.rmtree(run)
 
     def muster_updates(corpus_path):
-        """Yield documents under corpus_path that have changed since the latest edition,
-        updating the catalog for them as we go."""
+        """Yield the documents under corpus_path that have changed since the
+        last reindexing, updating the catalog for them as we go."""
         paths = list(muster_files(to_relpath(corpus_path)))
 
         # Note deleted documents.

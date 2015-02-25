@@ -56,7 +56,7 @@ $ ../interim_chispa.py find quotes it was the best of sense
 
 $ ../interim_chispa.py find quotes it was the of 
 @ Traceback (most recent call last):
-@   File "../interim_chispa.py", line 376, in <module>
+@   File "../interim_chispa.py", line 382, in <module>
 @     main(sys.argv)
 @   File "../interim_chispa.py", line 34, in main
 @     search_ui(argv[2], argv[3:], omit_stopwords)
