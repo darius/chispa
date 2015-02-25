@@ -52,6 +52,9 @@ def search(index_path, terms):
         try:
             paths = list(ask_index(index_path, 'search', query=terms))
         except IOError:
+            # We're presuming an I/O error is due to a concurrent writer
+            # deleting an index file we needed, unless it keeps happening.
+            # XXX find a more-selective kind of IOError?
             if chances == 0: raise
     for path in paths:
         yield relpath(path, start='.')
