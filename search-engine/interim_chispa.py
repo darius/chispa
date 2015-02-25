@@ -50,7 +50,7 @@ def search(index_path, terms):
     the index, have all of the terms."""
     for chances in range(4, -1, -1):
         try:
-            paths = ask_index(index_path, 'search', query=terms)
+            paths = list(ask_index(index_path, 'search', query=terms))
         except IOError:
             if chances == 0: raise
     for path in paths:
