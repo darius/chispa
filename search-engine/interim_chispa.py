@@ -112,7 +112,7 @@ def also_lowercased(terms):
 def write_empty_index(path):
     os.mkdir(path)
     with open(join(path, 'catalog.pickle'), 'wb') as f:
-        pickle.dump({'runs': {}, 'documents': {}, 'next_id': 0}, f)
+        pickle.dump({'runs': {}, 'docs_by_path': {}, 'next_id': 0}, f)
 
 def ask_index(index_path, command, **arguments):
     "Open the index at `index_path`, and perform `command` on it."
@@ -137,20 +137,18 @@ def ask_index(index_path, command, **arguments):
 
     trash = []                  # Directories to delete
 
-    documents = catalog['documents']
-    doc_ids = {path: doc_id for doc_id, (path, _) in documents.items()}
+    docs_by_path = catalog['docs_by_path']
+    paths_by_doc_id = {doc_id: path
+                       for path, (doc_id, _) in docs_by_path.items()}
 
     next_doc_ids = (str(ii) for ii in itertools.count(int(catalog['next_id'])))
 
     def write_catalog(catalog_file):
         pickle.dump({'runs': {int(basename(run)): size
                               for run, size in runs.items()},
-                     'documents': documents,
+                     'docs_by_path': docs_by_path,
                      'next_id': next(next_doc_ids)},
                     catalog_file)
-
-    def doc_path(doc_id):     return from_relpath(documents[doc_id][0])
-    def doc_metadata(doc_id): return documents[doc_id][1]
 
     index_parent = os.path.dirname(index_path)
     def to_relpath(path):   return relpath(path, start=index_parent)
@@ -158,8 +156,9 @@ def ask_index(index_path, command, **arguments):
 
     def search(query):
         "Return the paths of the documents that have all of `query`'s terms."
-        return map(doc_path, set.intersection(*(set(find(term))
-                                                for term in query)))
+        return (paths_by_doc_id[doc_id]
+                for doc_id in set.intersection(*(set(find(term))
+                                                 for term in query)))
 
     def find(term):
         return itertools.chain(*(find_in_run(run, term) for run in runs))
@@ -189,21 +188,22 @@ def ask_index(index_path, command, **arguments):
         paths = list(muster_files(to_relpath(corpus_path)))
 
         # Note deleted documents.
-        for catalogued in set(doc_ids.keys()) - set(paths):
+        for catalogued in set(docs_by_path) - set(paths):
             if is_under(corpus_path, catalogued):
-                del documents[doc_ids[catalogued]]
-                del doc_ids[catalogued]
+                del paths_by_doc_id[docs_by_path[catalogued][0]]
+                del docs_by_path[catalogued]
                 if debug: print('missing', basename(catalogued))
 
         # Note and yield new and changed documents.
         for path in paths:
             metadata = get_metadata(path)
-            old_doc_id = doc_ids.get(path)
-            if old_doc_id is None or doc_metadata(old_doc_id) != metadata:
-                if old_doc_id is not None:
-                    del documents[old_doc_id]
-                doc_ids[path] = doc_id = next(next_doc_ids)
-                documents[doc_id] = (path, metadata)
+            old_id, old_metadata = docs_by_path.get(path, (None, None))
+            if old_metadata != metadata:
+                if old_id is not None:
+                    del paths_by_doc_id[old_id]
+                doc_id = next(next_doc_ids)
+                paths_by_doc_id[doc_id] = path
+                docs_by_path[path] = (doc_id, metadata)
                 if debug: print('indexing', basename(path))
                 yield path, doc_id
 
@@ -261,7 +261,7 @@ def ask_index(index_path, command, **arguments):
     def read_span(span):
         with gzip.open(span, 'rt') as f:
             for posting in read_tuples(f):
-                if posting[1] in documents:
+                if posting[1] in paths_by_doc_id:
                     yield posting
 
     def find_spans(run, term):
