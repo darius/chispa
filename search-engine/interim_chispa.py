@@ -228,7 +228,7 @@ def ask_index(index_path, command, **arguments):
                 del runs[run]
 
     def read_run(run):
-        for span_name, _, _ in muster_spans(run):
+        for span_name, _ in muster_spans(run):
             for posting in read_span(join(run, span_name)):
                 yield posting
 
@@ -242,7 +242,7 @@ def ask_index(index_path, command, **arguments):
                 span_postings = list(span_postings)
                 with gzip.open(join(run, '%s.gz' % ii), 'wt') as span_file:
                     write_tuples(span_file, span_postings)
-                write_tuple(map_file, (span_postings[0][0], span_postings[-1][0]))
+                write_tuple(map_file, (span_postings[-1][0],))
                 size += len(span_postings)
         runs[run] = size
 
@@ -266,14 +266,18 @@ def ask_index(index_path, command, **arguments):
 
     def find_spans(run, term):
         "Yield the spans within the run that may have the term."
-        for span_name, lo, hi in muster_spans(run):
-            if lo <= term <= hi:
+        lo = ''
+        for span_name, hi in muster_spans(run):
+            if term < lo:
+                break
+            if term <= hi:
                 yield join(run, span_name)
+            lo = hi
 
     def muster_spans(run):
         with open(join(run, 'span-map')) as f:
-            for ii, (lo, hi) in enumerate(read_tuples(f)):
-                yield '%s.gz' % ii, lo, hi
+            for ii, (hi,) in enumerate(read_tuples(f)):
+                yield '%s.gz' % ii, hi
 
     if command == 'search':
         return search(**arguments)
